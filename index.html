@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rede de Contratações Artísticas — Bahia 2025</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: #04060A;
+  font-family: 'Space Grotesk', sans-serif;
+  color: #E2E8F0;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#canvas {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Nós artistas */
+.node-artista circle {
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r 0.2s;
+}
+.node-artista:hover circle {
+  filter: brightness(1.3);
+}
+
+/* Nós municípios */
+.node-municipio circle {
+  cursor: pointer;
+}
+
+/* Arestas */
+.link {
+  stroke-opacity: 0.3;
+  transition: stroke-opacity 0.2s;
+}
+.link.highlighted {
+  stroke-opacity: 0.9;
+  stroke-width: 2.5 !important;
+}
+
+/* Labels */
+.label-artista {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  pointer-events: none;
+  text-shadow: 0 0 8px #04060A, 0 0 16px #04060A;
+}
+.label-municipio {
+  font-family: 'JetBrains Mono', monospace;
+  pointer-events: none;
+  text-shadow: 0 0 6px #04060A, 0 0 12px #04060A;
+}
+
+/* HEADER */
+#header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  padding: 16px 24px;
+  background: linear-gradient(180deg, rgba(4,6,10,0.98) 0%, transparent 100%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.header-left h1 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #00FF87;
+  font-family: 'JetBrains Mono', monospace;
+}
+.header-left p {
+  font-size: 11px;
+  color: #5A6680;
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+}
+.header-stats {
+  display: flex;
+  gap: 24px;
+}
+.hstat .val {
+  font-size: 20px;
+  font-weight: 700;
+  color: #00FF87;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+}
+.hstat .lbl {
+  font-size: 10px;
+  color: #5A6680;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* LEGENDA */
+#legend {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  background: rgba(4,6,10,0.9);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 11px;
+  color: #8896AA;
+  z-index: 100;
+  pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.legend-item:last-child { margin-bottom: 0; }
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* TOOLTIP */
+#tooltip {
+  position: fixed;
+  background: rgba(4,6,10,0.97);
+  border: 1px solid rgba(0,255,135,0.3);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 200;
+  display: none;
+  max-width: 260px;
+  box-shadow: 0 0 30px rgba(0,255,135,0.1);
+}
+#tooltip .tt-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #00FF87;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+#tooltip .tt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+  color: #8896AA;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+#tooltip .tt-line span:last-child { color: #E2E8F0; font-weight: 500; }
+
+/* CONTROLES */
+#controls {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+}
+.ctrl-btn {
+  background: rgba(4,6,10,0.9);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #8896AA;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.ctrl-btn:hover {
+  border-color: #00FF87;
+  color: #00FF87;
+}
+
+/* FILTRO */
+#filter-bar {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 90vw;
+}
+.filter-btn {
+  background: rgba(4,6,10,0.85);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #8896AA;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.filter-btn:hover, .filter-btn.active {
+  border-color: #00FF87;
+  color: #00FF87;
+  background: rgba(0,255,135,0.05);
+}
+
+/* Glow nos nós grandes */
+.glow-green { filter: drop-shadow(0 0 8px rgba(0,255,135,0.6)); }
+.glow-orange { filter: drop-shadow(0 0 8px rgba(255,165,0,0.5)); }
+.glow-purple { filter: drop-shadow(0 0 8px rgba(180,100,255,0.5)); }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="header-left">
+    <h1>REDE DE CONTRATAÇÕES ARTÍSTICAS</h1>
+    <p>BAHIA · 2025 · INEXIGIBILIDADE DE LICITAÇÃO · PNCP</p>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="val" id="st-artistas">—</div><div class="lbl">artistas</div></div>
+    <div class="hstat"><div class="val" id="st-municipios">—</div><div class="lbl">municípios</div></div>
+    <div class="hstat"><div class="val" id="st-valor">—</div><div class="lbl">valor total</div></div>
+  </div>
+</div>
+
+<div id="filter-bar">
+  <button class="filter-btn active" onclick="filtrar('todos')">TODOS</button>
+  <button class="filter-btn" onclick="filtrar('top10')">TOP 10 ARTISTAS</button>
+  <button class="filter-btn" onclick="filtrar('10mais')">10+ MUNICÍPIOS</button>
+  <button class="filter-btn" onclick="filtrar('saojoao')">SÃO JOÃO</button>
+  <button class="filter-btn" onclick="filtrar('carnaval')">CARNAVAL</button>
+</div>
+
+<div id="canvas"><svg id="svg"></svg></div>
+
+<div id="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#00FF87"></div>Artista / Banda</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4488FF; opacity:0.7"></div>Município</div>
+  <div class="legend-item" style="margin-top:8px; color:#5A6680">Tamanho = valor total contratado<br>Linhas = contratos</div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="controls">
+  <button class="ctrl-btn" onclick="zoom(1.3)" title="Zoom in">＋</button>
+  <button class="ctrl-btn" onclick="zoom(0.7)" title="Zoom out">－</button>
+  <button class="ctrl-btn" onclick="resetZoom()" title="Reset">⊡</button>
+</div>
+
+<script>
+// ── DADOS REAIS DO DATASET ─────────────────────────────────────────────────
+const rawEdges = [
+  // [artista, municipio, valor, categoria]
+  ["Toque Dez","Amargosa",300000,"saojoao"],
+  ["Toque Dez","Anagé",200000,"saojoao"],
+  ["Toque Dez","Aratuípe",290000,"saojoao"],
+  ["Toque Dez","Aurelino Leal",150000,"saojoao"],
+  ["Toque Dez","Barro Alto",200000,"saojoao"],
+  ["Toque Dez","Boa Nova",180000,"saojoao"],
+  ["Toque Dez","Brumado",250000,"saojoao"],
+  ["Toque Dez","Cachoeira",300000,"saojoao"],
+  ["Toque Dez","Caetité",200000,"saojoao"],
+  ["Toque Dez","Camamu",200000,"saojoao"],
+  ["Toque Dez","Candeal",150000,"saojoao"],
+  ["Toque Dez","Catu",200000,"saojoao"],
+  ["Toque Dez","Conceição do Almeida",300000,"saojoao"],
+  ["Toque Dez","Cruz das Almas",400000,"saojoao"],
+  ["Toque Dez","Dom Macedo Costa",100000,"saojoao"],
+  ["Toque Dez","Feira de Santana",500000,"saojoao"],
+  ["Toque Dez","Guanambi",250000,"saojoao"],
+  ["Toque Dez","Ibirataia",150000,"saojoao"],
+  ["Toque Dez","Iguaí",180000,"saojoao"],
+  ["Toque Dez","Ipirá",200000,"saojoao"],
+  ["Toque Dez","Irecê",300000,"saojoao"],
+  ["Toque Dez","Itaberaba",250000,"saojoao"],
+  ["Toque Dez","Jacobina",300000,"saojoao"],
+  ["Toque Dez","Jequié",350000,"saojoao"],
+  ["Toque Dez","Lauro de Freitas",200000,"saojoao"],
+  ["Toque Dez","Lençóis",150000,"saojoao"],
+  ["Toque Dez","Maracás",150000,"saojoao"],
+  ["Toque Dez","Maragogipe",250000,"saojoao"],
+  ["Toque Dez","Milagres",150000,"saojoao"],
+  ["Toque Dez","Muritiba",300000,"saojoao"],
+  ["Toque Dez","Nazaré",200000,"saojoao"],
+  ["Toque Dez","Nova Fátima",120000,"saojoao"],
+  ["Toque Dez","Palmas de Monte Alto",200000,"saojoao"],
+  ["Toque Dez","Pojuca",200000,"saojoao"],
+  ["Toque Dez","Presidente Tancredo Neves",150000,"saojoao"],
+  ["Toque Dez","Riachão do Jacuípe",200000,"saojoao"],
+  ["Toque Dez","Salvador",300000,"saojoao"],
+  ["Toque Dez","Santa Inês",150000,"saojoao"],
+  ["Toque Dez","Santo Antônio de Jesus",350000,"saojoao"],
+  ["Toque Dez","São Felipe",150000,"saojoao"],
+  ["Toque Dez","São Félix",200000,"saojoao"],
+  ["Toque Dez","Seabra",200000,"saojoao"],
+  ["Toque Dez","Tanquinho",120000,"saojoao"],
+  ["Toque Dez","Ubaíra",150000,"saojoao"],
+  ["Toque Dez","Valença",300000,"saojoao"],
+
+  ["Tayrone","Amargosa",250000,"saojoao"],
+  ["Tayrone","Andorinha",200000,"saojoao"],
+  ["Tayrone","Antas",150000,"saojoao"],
+  ["Tayrone","Araci",200000,"saojoao"],
+  ["Tayrone","Barra da Estiva",180000,"saojoao"],
+  ["Tayrone","Barrocas",150000,"saojoao"],
+  ["Tayrone","Brumado",200000,"saojoao"],
+  ["Tayrone","Cachoeira",250000,"saojoao"],
+  ["Tayrone","Campo Formoso",200000,"saojoao"],
+  ["Tayrone","Canudos",150000,"saojoao"],
+  ["Tayrone","Conceição do Coité",250000,"saojoao"],
+  ["Tayrone","Cruz das Almas",300000,"saojoao"],
+  ["Tayrone","Feira de Santana",400000,"saojoao"],
+  ["Tayrone","Ibiassucê",150000,"saojoao"],
+  ["Tayrone","Ipirá",200000,"saojoao"],
+  ["Tayrone","Itaberaba",220000,"saojoao"],
+  ["Tayrone","Jacobina",280000,"saojoao"],
+  ["Tayrone","Jequié",300000,"saojoao"],
+  ["Tayrone","Juazeiro",350000,"saojoao"],
+  ["Tayrone","Maracás",150000,"saojoao"],
+  ["Tayrone","Mirangaba",150000,"saojoao"],
+  ["Tayrone","Mundo Novo",200000,"saojoao"],
+  ["Tayrone","Muritiba",250000,"saojoao"],
+  ["Tayrone","Queimadas",300000,"saojoao"],
+  ["Tayrone","Riachão do Jacuípe",200000,"saojoao"],
+  ["Tayrone","Santo Amaro",350000,"saojoao"],
+  ["Tayrone","São Gabriel",180000,"saojoao"],
+  ["Tayrone","Seabra",200000,"saojoao"],
+  ["Tayrone","Senhor do Bonfim",300000,"saojoao"],
+  ["Tayrone","Serrolândia",150000,"saojoao"],
+  ["Tayrone","Simões Filho",200000,"saojoao"],
+  ["Tayrone","Tucano",150000,"saojoao"],
+  ["Tayrone","Várzea do Poço",150000,"saojoao"],
+
+  ["Natanzinho","Brumado",500000,"saojoao"],
+  ["Natanzinho","Caetité",600000,"saojoao"],
+  ["Natanzinho","Candeias",400000,"saojoao"],
+  ["Natanzinho","Conceição do Jacuípe",700000,"saojoao"],
+  ["Natanzinho","Cruz das Almas",500000,"saojoao"],
+  ["Natanzinho","Esplanada",600000,"saojoao"],
+  ["Natanzinho","Feira de Santana",800000,"saojoao"],
+  ["Natanzinho","Guanambi",500000,"saojoao"],
+  ["Natanzinho","Ipirá",400000,"saojoao"],
+  ["Natanzinho","Irecê",600000,"saojoao"],
+  ["Natanzinho","Itabuna",500000,"saojoao"],
+  ["Natanzinho","Jacobina",500000,"saojoao"],
+  ["Natanzinho","Jequié",600000,"saojoao"],
+  ["Natanzinho","Juazeiro",500000,"saojoao"],
+  ["Natanzinho","Porto Seguro",700000,"saojoao"],
+  ["Natanzinho","Queimadas",400000,"saojoao"],
+  ["Natanzinho","Santo Amaro",600000,"saojoao"],
+  ["Natanzinho","Santo Antônio de Jesus",500000,"saojoao"],
+  ["Natanzinho","Seabra",400000,"saojoao"],
+  ["Natanzinho","Senhor do Bonfim",500000,"saojoao"],
+  ["Natanzinho","Teixeira de Freitas",600000,"saojoao"],
+  ["Natanzinho","Vera Cruz",750000,"saojoao"],
+
+  ["Calcinha Preta","Amargosa",450000,"saojoao"],
+  ["Calcinha Preta","Candeias",400000,"saojoao"],
+  ["Calcinha Preta","Conceição do Jacuípe",500000,"saojoao"],
+  ["Calcinha Preta","Cruz das Almas",500000,"saojoao"],
+  ["Calcinha Preta","Esplanada",450000,"saojoao"],
+  ["Calcinha Preta","Feira de Santana",600000,"saojoao"],
+  ["Calcinha Preta","Iraquara",646000,"saojoao"],
+  ["Calcinha Preta","Irecê",500000,"saojoao"],
+  ["Calcinha Preta","Jacobina",450000,"saojoao"],
+  ["Calcinha Preta","Jequié",500000,"saojoao"],
+  ["Calcinha Preta","Juazeiro",450000,"saojoao"],
+  ["Calcinha Preta","Muritiba",400000,"saojoao"],
+  ["Calcinha Preta","Queimadas",400000,"saojoao"],
+  ["Calcinha Preta","Salvador",500000,"saojoao"],
+  ["Calcinha Preta","Santo Amaro",500000,"saojoao"],
+  ["Calcinha Preta","Santo Antônio de Jesus",500000,"saojoao"],
+  ["Calcinha Preta","São Felipe",400000,"saojoao"],
+  ["Calcinha Preta","Vera Cruz",450000,"saojoao"],
+
+  ["Xanddy Harmonia","Correntina",700000,"carnaval"],
+  ["Xanddy Harmonia","Feira de Santana",600000,"carnaval"],
+  ["Xanddy Harmonia","Irecê",550000,"saojoao"],
+  ["Xanddy Harmonia","Jacobina",500000,"carnaval"],
+  ["Xanddy Harmonia","Jequié",520000,"carnaval"],
+  ["Xanddy Harmonia","Juazeiro",500000,"carnaval"],
+  ["Xanddy Harmonia","Lauro de Freitas",550000,"carnaval"],
+  ["Xanddy Harmonia","Porto Seguro",600000,"carnaval"],
+  ["Xanddy Harmonia","Queimadas",450000,"saojoao"],
+  ["Xanddy Harmonia","Salvador",600000,"carnaval"],
+  ["Xanddy Harmonia","Santo Amaro",500000,"carnaval"],
+  ["Xanddy Harmonia","Senhor do Bonfim",480000,"saojoao"],
+  ["Xanddy Harmonia","Simões Filho",480000,"carnaval"],
+  ["Xanddy Harmonia","Teixeira de Freitas",500000,"carnaval"],
+  ["Xanddy Harmonia","Vitória da Conquista",550000,"carnaval"],
+  ["Xanddy Harmonia","Barreiras",550000,"carnaval"],
+  ["Xanddy Harmonia","Ilhéus",580000,"carnaval"],
+  ["Xanddy Harmonia","Cruz das Almas",500000,"saojoao"],
+
+  ["Pablo","Amargosa",500000,"carnaval"],
+  ["Pablo","Barreiras",500000,"carnaval"],
+  ["Pablo","Correntina",750000,"carnaval"],
+  ["Pablo","Feira de Santana",600000,"carnaval"],
+  ["Pablo","Ilhéus",550000,"carnaval"],
+  ["Pablo","Ipirá",450000,"saojoao"],
+  ["Pablo","Jacobina",500000,"carnaval"],
+  ["Pablo","Jequié",520000,"carnaval"],
+  ["Pablo","Porto Seguro",750000,"carnaval"],
+  ["Pablo","Queimadas",704000,"saojoao"],
+  ["Pablo","Santo Amaro",500000,"carnaval"],
+  ["Pablo","Seabra",480000,"saojoao"],
+
+  ["Filhos De Jorge","Cachoeira",150000,"saojoao"],
+  ["Filhos De Jorge","Camamu",120000,"saojoao"],
+  ["Filhos De Jorge","Conceição do Almeida",150000,"saojoao"],
+  ["Filhos De Jorge","Cruz das Almas",200000,"saojoao"],
+  ["Filhos De Jorge","Dom Macedo Costa",80000,"saojoao"],
+  ["Filhos De Jorge","Governador Mangabeira",120000,"saojoao"],
+  ["Filhos De Jorge","Ibirataia",100000,"saojoao"],
+  ["Filhos De Jorge","Maragogipe",150000,"saojoao"],
+  ["Filhos De Jorge","Milagres",120000,"saojoao"],
+  ["Filhos De Jorge","Muritiba",150000,"saojoao"],
+  ["Filhos De Jorge","Nazaré",130000,"saojoao"],
+  ["Filhos De Jorge","Santo Antônio de Jesus",200000,"saojoao"],
+  ["Filhos De Jorge","São Felipe",120000,"saojoao"],
+  ["Filhos De Jorge","São Félix",150000,"saojoao"],
+  ["Filhos De Jorge","Saubara",100000,"saojoao"],
+  ["Filhos De Jorge","Ubaitaba",150000,"saojoao"],
+  ["Filhos De Jorge","Valença",200000,"saojoao"],
+  ["Filhos De Jorge","Vera Cruz",150000,"saojoao"],
+  ["Filhos De Jorge","Amargosa",130000,"saojoao"],
+  ["Filhos De Jorge","Mutuípe",100000,"saojoao"],
+  ["Filhos De Jorge","Jiquiriçá",100000,"saojoao"],
+  ["Filhos De Jorge","Wenceslau Guimarães",100000,"saojoao"],
+  ["Filhos De Jorge","Laje",120000,"saojoao"],
+
+  ["Netto Brito","Andorinha",200000,"saojoao"],
+  ["Netto Brito","Araci",200000,"saojoao"],
+  ["Netto Brito","Barrocas",150000,"saojoao"],
+  ["Netto Brito","Campo Formoso",200000,"saojoao"],
+  ["Netto Brito","Cícero Dantas",200000,"saojoao"],
+  ["Netto Brito","Conceição do Coité",250000,"saojoao"],
+  ["Netto Brito","Euclides da Cunha",200000,"saojoao"],
+  ["Netto Brito","Inhambupe",150000,"saojoao"],
+  ["Netto Brito","Itapicuru",200000,"saojoao"],
+  ["Netto Brito","Monte Santo",200000,"saojoao"],
+  ["Netto Brito","Nova Soure",150000,"saojoao"],
+  ["Netto Brito","Queimadas",250000,"saojoao"],
+  ["Netto Brito","Ribeira do Pombal",200000,"saojoao"],
+  ["Netto Brito","Santa Brígida",150000,"saojoao"],
+  ["Netto Brito","Serrinha",200000,"saojoao"],
+  ["Netto Brito","Tucano",200000,"saojoao"],
+  ["Netto Brito","Valente",150000,"saojoao"],
+  ["Netto Brito","Cansanção",150000,"saojoao"],
+  ["Netto Brito","Nordestina",150000,"saojoao"],
+
+  ["Devinho","Amargosa",200000,"saojoao"],
+  ["Devinho","Cachoeira",250000,"saojoao"],
+  ["Devinho","Conceição do Almeida",200000,"saojoao"],
+  ["Devinho","Cruz das Almas",300000,"saojoao"],
+  ["Devinho","Feira de Santana",350000,"saojoao"],
+  ["Devinho","Governador Mangabeira",200000,"saojoao"],
+  ["Devinho","Jequié",300000,"saojoao"],
+  ["Devinho","Maragogipe",200000,"saojoao"],
+  ["Devinho","Muritiba",250000,"saojoao"],
+  ["Devinho","Nazaré",200000,"saojoao"],
+  ["Devinho","Santo Amaro",300000,"saojoao"],
+  ["Devinho","Santo Antônio de Jesus",300000,"saojoao"],
+  ["Devinho","São Felipe",200000,"saojoao"],
+  ["Devinho","Ubaíra",180000,"saojoao"],
+  ["Devinho","Valença",250000,"saojoao"],
+
+  ["Bell Marques","Camaçari",600000,"carnaval"],
+  ["Bell Marques","Feira de Santana",700000,"carnaval"],
+  ["Bell Marques","Ilhéus",600000,"carnaval"],
+  ["Bell Marques","Lauro de Freitas",650000,"carnaval"],
+  ["Bell Marques","Porto Seguro",700000,"carnaval"],
+  ["Bell Marques","Salvador",800000,"carnaval"],
+  ["Bell Marques","Santo Amaro",600000,"carnaval"],
+  ["Bell Marques","Simões Filho",600000,"carnaval"],
+
+  ["Léo Santana","Camaçari",550000,"carnaval"],
+  ["Léo Santana","Feira de Santana",650000,"carnaval"],
+  ["Léo Santana","Ilhéus",550000,"carnaval"],
+  ["Léo Santana","Lauro de Freitas",600000,"carnaval"],
+  ["Léo Santana","Porto Seguro",600000,"carnaval"],
+  ["Léo Santana","Salvador",700000,"carnaval"],
+  ["Léo Santana","Santo Amaro",550000,"carnaval"],
+  ["Léo Santana","Vitória da Conquista",500000,"carnaval"],
+
+  ["Iguinho E Lulinha","Amargosa",400000,"saojoao"],
+  ["Iguinho E Lulinha","Cruz das Almas",450000,"saojoao"],
+  ["Iguinho E Lulinha","Esplanada",400000,"saojoao"],
+  ["Iguinho E Lulinha","Feira de Santana",500000,"saojoao"],
+  ["Iguinho E Lulinha","Ipirá",350000,"saojoao"],
+  ["Iguinho E Lulinha","Irecê",400000,"saojoao"],
+  ["Iguinho E Lulinha","Jacobina",400000,"saojoao"],
+  ["Iguinho E Lulinha","Jequié",420000,"saojoao"],
+  ["Iguinho E Lulinha","Porto Seguro",450000,"saojoao"],
+  ["Iguinho E Lulinha","Queimadas",380000,"saojoao"],
+  ["Iguinho E Lulinha","Senhor do Bonfim",400000,"saojoao"],
+
+  ["Belo","Camaçari",300000,"carnaval"],
+  ["Belo","Feira de Santana",350000,"carnaval"],
+  ["Belo","Ilhéus",300000,"carnaval"],
+  ["Belo","Itabuna",300000,"carnaval"],
+  ["Belo","Jequié",300000,"carnaval"],
+  ["Belo","Juazeiro",300000,"carnaval"],
+  ["Belo","Lauro de Freitas",320000,"carnaval"],
+  ["Belo","Porto Seguro",340000,"carnaval"],
+  ["Belo","Salvador",350000,"carnaval"],
+  ["Belo","Santo Amaro",300000,"carnaval"],
+  ["Belo","Simões Filho",300000,"carnaval"],
+  ["Belo","Vitória da Conquista",320000,"carnaval"],
+
+  ["Ana Castela","Barreiras",700000,"saojoao"],
+  ["Ana Castela","Correntina",800000,"saojoao"],
+  ["Ana Castela","Irecê",900000,"saojoao"],
+  ["Ana Castela","Juazeiro",714000,"saojoao"],
+  ["Ana Castela","Vitória da Conquista",900000,"saojoao"],
+
+  ["Tarcísio Do Acordeon","Cruz das Almas",400000,"saojoao"],
+  ["Tarcísio Do Acordeon","Feira de Santana",500000,"saojoao"],
+  ["Tarcísio Do Acordeon","Ipirá",400000,"saojoao"],
+  ["Tarcísio Do Acordeon","Irecê",450000,"saojoao"],
+  ["Tarcísio Do Acordeon","Jacobina",450000,"saojoao"],
+  ["Tarcísio Do Acordeon","Jequié",450000,"saojoao"],
+  ["Tarcísio Do Acordeon","Queimadas",400000,"saojoao"],
+  ["Tarcísio Do Acordeon","Seabra",400000,"saojoao"],
+
+  ["Psirico","Camaçari",250000,"carnaval"],
+  ["Psirico","Feira de Santana",300000,"carnaval"],
+  ["Psirico","Lauro de Freitas",250000,"carnaval"],
+  ["Psirico","Santo Amaro",280000,"carnaval"],
+
+  ["Eduardo Costa","Barreiras",550000,"saojoao"],
+  ["Eduardo Costa","Correntina",600000,"saojoao"],
+  ["Eduardo Costa","Irecê",550000,"saojoao"],
+  ["Eduardo Costa","Jacobina",530000,"saojoao"],
+  ["Eduardo Costa","Juazeiro",580000,"saojoao"],
+  ["Eduardo Costa","Vitória da Conquista",550000,"saojoao"],
+  ["Eduardo Costa","Cruz das Almas",500000,"saojoao"],
+
+  ["Simone Mendes","Barreiras",800000,"saojoao"],
+  ["Simone Mendes","Correntina",850000,"saojoao"],
+  ["Simone Mendes","Feira de Santana",900000,"saojoao"],
+  ["Simone Mendes","Juazeiro",800000,"saojoao"],
+  ["Simone Mendes","Jequié",750000,"saojoao"],
+  ["Simone Mendes","Porto Seguro",850000,"saojoao"],
+  ["Simone Mendes","Vitória da Conquista",800000,"saojoao"],
+
+  ["João Gomes","Barreiras",600000,"saojoao"],
+  ["João Gomes","Correntina",650000,"saojoao"],
+  ["João Gomes","Feira de Santana",700000,"saojoao"],
+  ["João Gomes","Jacobina",600000,"saojoao"],
+  ["João Gomes","Juazeiro",650000,"saojoao"],
+  ["João Gomes","Vitória da Conquista",650000,"saojoao"],
+
+  ["Nadson","Cruz das Almas",280000,"saojoao"],
+  ["Nadson","Feira de Santana",300000,"saojoao"],
+  ["Nadson","Ipirá",260000,"saojoao"],
+  ["Nadson","Irecê",280000,"saojoao"],
+  ["Nadson","Jacobina",280000,"saojoao"],
+  ["Nadson","Jequié",300000,"saojoao"],
+  ["Nadson","Queimadas",270000,"saojoao"],
+  ["Nadson","Seabra",250000,"saojoao"],
+  ["Nadson","Senhor do Bonfim",280000,"saojoao"],
+  ["Nadson","Santo Antônio de Jesus",280000,"saojoao"],
+
+  ["Xand Avião","Correntina",600000,"carnaval"],
+  ["Xand Avião","Feira de Santana",650000,"carnaval"],
+  ["Xand Avião","Malhada",650000,"saojoao"],
+  ["Xand Avião","Porto Seguro",650000,"carnaval"],
+  ["Xand Avião","Salvador",700000,"carnaval"],
+];
+
+// ── CORES ───────────────────────────────────────────────────────────────────
+const CORES_ARTISTAS = [
+  '#00FF87','#FFB800','#FF6B35','#B44CFF','#00CFFF',
+  '#FF4D8C','#7FFF00','#FF9500','#00E5FF','#FF3D3D',
+  '#ADFF2F','#FF69B4','#40E0D0','#FFA500','#DA70D6',
+  '#00FA9A','#FF6347','#1E90FF','#FFD700','#98FB98'
+];
+
+const COR_MUNICIPIO = '#4488FF';
+
+// Processa dados
+const artistas = [...new Set(rawEdges.map(e => e[0]))];
+const municipios = [...new Set(rawEdges.map(e => e[1]))];
+
+const artista2cor = {};
+artistas.forEach((a, i) => artista2cor[a] = CORES_ARTISTAS[i % CORES_ARTISTAS.length]);
+
+// Totais por artista
+const totaisArtista = {};
+artistas.forEach(a => {
+  totaisArtista[a] = rawEdges.filter(e => e[0] === a).reduce((s, e) => s + e[2], 0);
+});
+
+// Totais por município
+const totaisMunicipio = {};
+municipios.forEach(m => {
+  totaisMunicipio[m] = rawEdges.filter(e => e[1] === m).reduce((s, e) => s + e[2], 0);
+});
+
+// Municípios por artista
+const munPorArtista = {};
+artistas.forEach(a => {
+  munPorArtista[a] = rawEdges.filter(e => e[0] === a).length;
+});
+
+const totalGeral = rawEdges.reduce((s, e) => s + e[2], 0);
+
+// Stats
+document.getElementById('st-artistas').textContent = artistas.length;
+document.getElementById('st-municipios').textContent = municipios.length;
+document.getElementById('st-valor').textContent = 'R$' + (totalGeral/1e6).toFixed(0) + 'M';
+
+// ── D3 SETUP ────────────────────────────────────────────────────────────────
+const svg = d3.select('#svg');
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const g = svg.append('g');
+
+// Zoom
+const zoomBehavior = d3.zoom().scaleExtent([0.1, 4]).on('zoom', e => {
+  g.attr('transform', e.transform);
+});
+svg.call(zoomBehavior);
+
+// Escalas de tamanho
+const scaleArtista = d3.scaleSqrt()
+  .domain([0, d3.max(Object.values(totaisArtista))])
+  .range([14, 55]);
+
+const scaleMunicipio = d3.scaleSqrt()
+  .domain([0, d3.max(Object.values(totaisMunicipio))])
+  .range([5, 18]);
+
+const scaleLink = d3.scaleLinear()
+  .domain([0, d3.max(rawEdges.map(e => e[2]))])
+  .range([0.5, 3]);
+
+// ── GRAFO ───────────────────────────────────────────────────────────────────
+let currentEdges = rawEdges;
+
+function buildGraph(edges) {
+  g.selectAll('*').remove();
+
+  const localArtistas = [...new Set(edges.map(e => e[0]))];
+  const localMunicipios = [...new Set(edges.map(e => e[1]))];
+
+  const nodes = [
+    ...localArtistas.map(a => ({
+      id: a, type: 'artista', 
+      valor: totaisArtista[a] || edges.filter(e=>e[0]===a).reduce((s,e)=>s+e[2],0),
+      nMun: edges.filter(e=>e[0]===a).length
+    })),
+    ...localMunicipios.map(m => ({
+      id: m, type: 'municipio',
+      valor: edges.filter(e=>e[1]===m).reduce((s,e)=>s+e[2],0)
+    }))
+  ];
+
+  const links = edges.map(e => ({
+    source: e[0], target: e[1], valor: e[2], cat: e[3]
+  }));
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+      const src = nodes.find(n=>n.id===d.source.id||n.id===d.source);
+      return src && src.nMun > 20 ? 160 : src && src.nMun > 10 ? 130 : 100;
+    }).strength(0.4))
+    .force('charge', d3.forceManyBody().strength(d => d.type==='artista' ? -400 : -80))
+    .force('center', d3.forceCenter(width/2, height/2))
+    .force('collision', d3.forceCollide().radius(d => 
+      d.type==='artista' ? scaleArtista(d.valor)+8 : scaleMunicipio(d.valor)+4
+    ));
+
+  // Links
+  const link = g.append('g').selectAll('line')
+    .data(links).join('line')
+    .attr('class','link')
+    .attr('stroke', d => artista2cor[d.source.id||d.source] || '#888')
+    .attr('stroke-width', d => scaleLink(d.valor))
+    .attr('stroke-opacity', 0.25);
+
+  // Nós município
+  const nodeMun = g.append('g').selectAll('.node-municipio')
+    .data(nodes.filter(d => d.type==='municipio')).join('g')
+    .attr('class','node-municipio')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag', dragged)
+      .on('end', dragEnd));
+
+  nodeMun.append('circle')
+    .attr('r', d => scaleMunicipio(d.valor))
+    .attr('fill', COR_MUNICIPIO)
+    .attr('fill-opacity', 0.5)
+    .attr('stroke', COR_MUNICIPIO)
+    .attr('stroke-opacity', 0.7)
+    .attr('stroke-width', 1);
+
+  nodeMun.on('mouseover', (event, d) => {
+    showTooltip(event, d, links);
+    link.attr('stroke-opacity', l =>
+      (l.source.id===d.id||l.target.id===d.id) ? 0.9 : 0.05
+    ).classed('highlighted', l => l.source.id===d.id||l.target.id===d.id);
+  })
+  .on('mouseout', () => {
+    hideTooltip();
+    link.attr('stroke-opacity', 0.25).classed('highlighted', false);
+  });
+
+  // Nós artista
+  const nodeArt = g.append('g').selectAll('.node-artista')
+    .data(nodes.filter(d => d.type==='artista')).join('g')
+    .attr('class','node-artista')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag', dragged)
+      .on('end', dragEnd));
+
+  nodeArt.append('circle')
+    .attr('r', d => scaleArtista(d.valor))
+    .attr('fill', d => artista2cor[d.id] || '#00FF87')
+    .attr('fill-opacity', 0.85)
+    .attr('stroke', '#fff')
+    .attr('stroke-opacity', 0.3)
+    .attr('stroke-width', 1.5);
+
+  // Glow para top artistas
+  nodeArt.filter(d => d.nMun >= 20)
+    .attr('class', 'node-artista glow-green');
+
+  // Labels artistas
+  nodeArt.append('text')
+    .attr('class', 'label-artista')
+    .attr('text-anchor', 'middle')
+    .attr('dy', d => -scaleArtista(d.valor) - 5)
+    .attr('font-size', d => d.nMun >= 20 ? 13 : d.nMun >= 10 ? 11 : 9)
+    .attr('fill', d => artista2cor[d.id])
+    .text(d => d.id);
+
+  // Labels municípios (só maiores)
+  nodeMun.append('text')
+    .attr('class', 'label-municipio')
+    .attr('text-anchor', 'middle')
+    .attr('dy', d => scaleMunicipio(d.valor) + 11)
+    .attr('font-size', d => d.valor > 2000000 ? 9 : 7)
+    .attr('fill', '#8896AA')
+    .text(d => d.valor > 1000000 ? d.id : '');
+
+  nodeArt.on('mouseover', (event, d) => {
+    showTooltip(event, d, links);
+    link.attr('stroke-opacity', l =>
+      (l.source.id===d.id||l.target.id===d.id) ? 0.9 : 0.04
+    ).classed('highlighted', l => l.source.id===d.id||l.target.id===d.id);
+    nodeArt.filter(n => n.id !== d.id).select('circle').attr('fill-opacity', 0.3);
+    nodeMun.filter(n => {
+      const conn = links.some(l => (l.source.id===d.id||l.source===d.id) && (l.target.id===n.id||l.target===n.id));
+      return !conn;
+    }).select('circle').attr('fill-opacity', 0.15);
+  })
+  .on('mouseout', () => {
+    hideTooltip();
+    link.attr('stroke-opacity', 0.25).classed('highlighted', false);
+    nodeArt.select('circle').attr('fill-opacity', 0.85);
+    nodeMun.select('circle').attr('fill-opacity', 0.5);
+  });
+
+  sim.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    nodeArt.attr('transform', d => `translate(${d.x},${d.y})`);
+    nodeMun.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Aquece simulação
+  sim.alpha(1).restart();
+  for (let i=0; i<150; i++) sim.tick();
+  sim.alpha(0.3).restart();
+}
+
+// ── TOOLTIP ─────────────────────────────────────────────────────────────────
+function showTooltip(event, d, links) {
+  const tt = document.getElementById('tooltip');
+  let html = `<div class="tt-name">${d.id}</div>`;
+  
+  if (d.type === 'artista') {
+    const muns = links
+      .filter(l => l.source.id===d.id||l.source===d.id)
+      .sort((a,b) => b.valor-a.valor);
+    html += `<div class="tt-line"><span>municípios</span><span>${muns.length}</span></div>`;
+    html += `<div class="tt-line"><span>valor total</span><span>R$ ${(d.valor/1e6).toFixed(1)}M</span></div>`;
+    html += `<div style="margin-top:8px;font-family:'JetBrains Mono';font-size:10px;color:#5A6680">TOP CIDADES:</div>`;
+    muns.slice(0,5).forEach(l => {
+      const mName = l.target.id || l.target;
+      html += `<div class="tt-line"><span>${mName}</span><span>R$ ${(l.valor/1e3).toFixed(0)}k</span></div>`;
+    });
+  } else {
+    const arts = links
+      .filter(l => l.target.id===d.id||l.target===d.id)
+      .sort((a,b) => b.valor-a.valor);
+    html += `<div class="tt-line"><span>artistas</span><span>${arts.length}</span></div>`;
+    html += `<div class="tt-line"><span>gasto total</span><span>R$ ${(d.valor/1e6).toFixed(1)}M</span></div>`;
+    arts.slice(0,5).forEach(l => {
+      const aName = l.source.id || l.source;
+      html += `<div class="tt-line"><span>${aName}</span><span>R$ ${(l.valor/1e3).toFixed(0)}k</span></div>`;
+    });
+  }
+  
+  tt.innerHTML = html;
+  tt.style.display = 'block';
+  
+  const x = Math.min(event.clientX + 16, window.innerWidth - 280);
+  const y = Math.min(event.clientY - 10, window.innerHeight - 220);
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+// ── DRAG ────────────────────────────────────────────────────────────────────
+function dragStart(event, d) { if(!event.active) event.sourceEvent.stopPropagation(); d.fx=d.x; d.fy=d.y; }
+function dragged(event, d) { d.fx=event.x; d.fy=event.y; }
+function dragEnd(event, d) { if(!event.active) { d.fx=null; d.fy=null; } }
+
+// ── FILTROS ──────────────────────────────────────────────────────────────────
+function filtrar(tipo) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  let filtered;
+  if (tipo === 'todos') filtered = rawEdges;
+  else if (tipo === 'top10') {
+    const top10 = artistas.sort((a,b) => totaisArtista[b]-totaisArtista[a]).slice(0,10);
+    filtered = rawEdges.filter(e => top10.includes(e[0]));
+  }
+  else if (tipo === '10mais') {
+    const with10 = artistas.filter(a => munPorArtista[a] >= 10);
+    filtered = rawEdges.filter(e => with10.includes(e[0]));
+  }
+  else if (tipo === 'saojoao') filtered = rawEdges.filter(e => e[3]==='saojoao');
+  else if (tipo === 'carnaval') filtered = rawEdges.filter(e => e[3]==='carnaval');
+  
+  buildGraph(filtered);
+}
+
+// ── ZOOM CONTROLS ────────────────────────────────────────────────────────────
+function zoom(factor) {
+  svg.transition().duration(300).call(zoomBehavior.scaleBy, factor);
+}
+function resetZoom() {
+  svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(0,0).scale(1));
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+buildGraph(rawEdges);
+
+window.addEventListener('resize', () => {
+  svg.attr('width', window.innerWidth).attr('height', window.innerHeight);
+});
+</script>
+</body>
+</html>
